@@ -1,0 +1,11 @@
+{
+  "name": "sansu-print-maker-mvp",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node js/tests/test.js",
+    "sync": "node scripts/sync_check.mjs",
+    "check": "npm test && npm run sync"
+  }
+}

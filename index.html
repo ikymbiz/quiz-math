@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>算数プリントメーカー</title>
+<style>
+  :root {
+    --fg: #222;
+    --bg: #fafafa;
+    --panel: #fff;
+    --accent: #3b82f6;
+    --accent-dark: #2563eb;
+    --border: #d1d5db;
+    --muted: #6b7280;
+    --danger: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+  }
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 12px 16px 40px;
+  }
+  h1 {
+    font-size: 19px;
+    margin: 4px 0 12px;
+  }
+  h1 .ver { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+  /* ─── タブ ─── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 14px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    padding-top: 4px;
+    z-index: 10;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 11px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    margin-bottom: -2px;
+  }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ─── パネル ─── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+
+  /* ─── フォーム ─── */
+  label.field {
+    display: block;
+    margin: 10px 0 6px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  label.field .hint {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 6px;
+  }
+  input[type="number"], select {
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--fg);
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: #fff;
+    cursor: pointer;
+    user-select: none;
+    font-size: 14px;
+    color: var(--fg);
+  }
+  .chip.on {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 4px;
+    font-size: 14px;
+  }
+  .checkbox input { width: 18px; height: 18px; }
+  button.primary {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 14px;
+  }
+  button.primary:active { background: var(--accent-dark); }
+  button.secondary {
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    background: #fff;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button.secondary:active { background: #eff6ff; }
+  .actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .error {
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: 10px;
+    white-space: pre-wrap;
+  }
+  .note {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 16px;
+    font-size: 14px;
+  }
+
+  /* ─── 問題・解答リスト ─── */
+  .sheet-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+  .meta-line {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  /* L-041 (再改訂): 印刷プリセット — 紙面有効活用のため 10/20/30 → 20/40/60 */
+  /* 大: 18pt / 2列×10行 = 20問 (低学年・ゆったり) */
+  /* 中: 13pt / 2列×20行 = 40問 (標準) */
+  /* 小: 11pt / 3列×20行 = 60問 (大量演習) */
+  .print-page[data-size="l"] .problems,
+  .print-page[data-size="l"] .answers {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(10, 1fr);
+    font-size: 18pt;
+  }
+  .print-page[data-size="m"] .problems,
+  .print-page[data-size="m"] .answers {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(20, 1fr);
+    font-size: 13pt;
+  }
+  .print-page[data-size="s"] .problems,
+  .print-page[data-size="s"] .answers {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: repeat(20, 1fr);
+    font-size: 11pt;
+  }
+  /* L-040: 1ページ単位で grid (列優先) */
+  .problems, .answers {
+    display: grid;
+    grid-auto-flow: column;
+    gap: 10px 22px;
+  }
+  /* L-029: 問題行は .num + .content の2カラム構造。
+     .content の内側で flex-wrap し、"=" の前に強制改行 (.br) を入れることで
+     式と "= 答え" が必ず縦に並ぶ。
+     第2行は (1) 番号の下ではなく式と同じ位置から始まる。 */
+  .problem, .answer-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 9px 0;
+    border-bottom: 1px dashed #e5e7eb;
+  }
+  .problem > .num, .answer-item > .num {
+    flex-shrink: 0;
+    margin-right: 6px;
+    margin-top: 0.55em; /* 1行目の式の中央に視覚的に揃える */
+  }
+  .problem > .content, .answer-item > .content {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    flex: 1;
+    line-height: 1.4;
+    min-height: 2.4em;
+  }
+  /* L-038: 穴埋め問題は 質問 / □=答え の 2 段表示 */
+  .answer-item > .content.ans-multi {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ans-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  /* L-029 / L-030: "= 答え" を 1つの分割不能 flex item にする。
+     親 .content の flex-wrap で：
+       ・全要素が一列に収まる → 一列
+       ・収まらない → eq-group ごと丸ごと次行へ送られる
+     ことで「収まる時は一列・段を変える時は = から」を両立。 */
+  .eq-group {
+    display: inline-flex;
+    align-items: center;
+  }
+  .num {
+    display: inline-block;
+    min-width: 24px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  /* ─── 分数の視覚表示（小学生向け） ───
+     親が flex (align-items: center) なので vertical-align は不要。
+     罫線は分数自身の縦中央に位置し、flex の center 整列で
+     演算子の中央線と自動的に揃う。
+  */
+  .frac {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    text-align: center;
+    margin: 0;
+    font-size: 0.95em;
+    line-height: 1;
+  }
+  .frac .f-n {
+    padding: 0 0.25em 0.08em;
+    border-bottom: 1.4px solid currentColor;
+    min-width: 0.6em;
+  }
+  .frac .f-d {
+    padding: 0.08em 0.25em 0;
+    min-width: 0.6em;
+  }
+
+  /* ─── 帯分数: 整数部 + 真分数を横に並べる ─── */
+  .mixed {
+    display: inline-flex;
+    align-items: center;
+  }
+  .mixed .m-int {
+    margin-right: 0.18em;
+    font-size: 1em;
+  }
+
+  /* ─── 演算子 + − × ÷ = ───
+     renderMath が <span class="op"> で包む。
+     親が flex なので margin で項間スペースを与える。
+     "=" だけは視覚的にやや低く感じられるので、専用クラスで少しだけ上げる。
+  */
+  .op {
+    display: inline-block;
+    margin: 0 0.55em;
+  }
+  .op-eq {
+    margin: 0 0.55em;
+    position: relative;
+    top: -0.12em;
+  }
+
+  @media (max-width: 520px) {
+    .problems, .answers { grid-template-columns: 1fr; }
+    .row { grid-template-columns: 1fr; }
+    h1 { font-size: 17px; }
+    .tab-btn { font-size: 12px; padding: 10px 4px; }
+  }
+
+  /* ─── 印刷用 ─── */
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+  @media print {
+    body { background: #fff; }
+    .container { max-width: none; padding: 0; }
+    .tabs, .no-print, h1 { display: none !important; }
+    .tab-panel { display: none !important; }
+    .tab-panel.print-target { display: block !important; }
+    .panel {
+      border: none;
+      padding: 0;
+      margin: 0;
+      background: transparent;
+    }
+    .sheet-title { font-size: 18pt; text-align: center; margin-bottom: 6mm; }
+    .meta-line { text-align: right; font-size: 9pt; margin-bottom: 4mm; }
+    /* L-040: 1ページ = 1 print-page、確実なページ区切り */
+    /* L-044: 親に definite height を与え、flex で .problems を残り高フル占有させる。
+       これにより grid-template-rows: repeat(N, 1fr) が効き、行が紙の縦全体に等分される。 */
+    .print-page {
+      page-break-after: always;
+      break-after: page;
+      height: calc(297mm - 30mm); /* A4 縦 - @page margin (15mm × 2) */
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+    .print-page .problems,
+    .print-page .answers {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .print-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    /* L-041: グリッド設定は print-page[data-size] セレクタでカスケード済 */
+    .problems, .answers {
+      gap: 4mm 10mm;
+    }
+    .problem, .answer-item {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      padding: 0;
+    }
+  }
+  /* 画面表示でもページ単位で見せる (印刷と同じレイアウト) */
+  .print-page + .print-page {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 2px dashed var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>算数プリントメーカー <span class="ver">v3</span></h1>
+
+<div class="tabs no-print">
+  <button class="tab-btn active" data-tab="gen">① 問題生成</button>
+  <button class="tab-btn" data-tab="print" id="tabBtnPrint" disabled>② 問題表示・印刷</button>
+  <button class="tab-btn" data-tab="answer" id="tabBtnAnswer" disabled>③ 解答</button>
+</div>
+
+<!-- ═══════════ タブ1: 生成 ═══════════ -->
+<div class="tab-panel active" id="tab-gen">
+  <div class="panel">
+    <label class="field">演算子 <span class="hint">（チップで複数選択）</span></label>
+    <div class="chips" id="ops">
+      <div class="chip on" data-op="+">＋</div>
+      <div class="chip on" data-op="-">−</div>
+      <div class="chip on" data-op="*">×</div>
+      <div class="chip on" data-op="/">÷</div>
+    </div>
+
+    <label class="field">数の種類</label>
+    <div class="chips" id="numberTypes">
+      <div class="chip on" data-nt="integer">整数</div>
+      <div class="chip"    data-nt="decimal1">小数 (1位)</div>
+      <div class="chip"    data-nt="decimal2">小数 (2位)</div>
+      <div class="chip"    data-nt="proper_fraction">真分数</div>
+      <div class="chip"    data-nt="improper_fraction">仮分数</div>
+      <div class="chip"    data-nt="mixed_number">帯分数</div>
+    </div>
+    <div class="note">× は「整数」を一緒に選んでいる時のみ使えます (例: 整数×小数)。÷ と 小数/分数 の組み合わせは未対応です。</div>
+
+    <div class="row">
+      <div>
+        <label class="field">分母（真分数）</label>
+        <select id="fractionDen">
+          <option value="">自由（〜9）</option>
+          <option value="2">2 で固定</option>
+          <option value="3">3 で固定</option>
+          <option value="4">4 で固定</option>
+          <option value="5">5 で固定</option>
+          <option value="6">6 で固定</option>
+          <option value="7">7 で固定</option>
+          <option value="8">8 で固定</option>
+          <option value="9">9 で固定</option>
+        </select>
+      </div>
+      <div>
+        <label class="field">分母の最大値</label>
+        <select id="fractionDenMax">
+          <option value="">指定なし（=9）</option>
+          <option value="3">3 まで</option>
+          <option value="4">4 まで</option>
+          <option value="5">5 まで</option>
+          <option value="6">6 まで</option>
+          <option value="7">7 まで</option>
+          <option value="8">8 まで</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label class="field">項数</label>
+        <select id="terms">
+          <option value="2" selected>2項</option>
+          <option value="3">3項</option>
+        </select>
+      </div>
+      <div>
+        <label class="field">整数の桁数</label>
+        <select id="digits">
+          <option value="1">1桁</option>
+          <option value="2" selected>2桁</option>
+          <option value="3">3桁</option>
+        </select>
+      </div>
+    </div>
+
+    <label class="checkbox">
+      <input type="checkbox" id="useRemainder">
+      あまりあり除算を含める
+    </label>
+
+    <label class="field">繰り上がり / 繰り下がり <span class="hint">(整数の加減のみ)</span></label>
+    <select id="carry">
+      <option value="any">指定なし</option>
+      <option value="without">繰り上がり/繰り下がり なし</option>
+      <option value="with">繰り上がり/繰り下がり あり</option>
+      <option value="all">連続 (両桁とも繰り上がり/下がり / Ⅰ-4・Ⅰ-8)</option>
+    </select>
+
+    <label class="field">補数フィルタ (Ⅰ-2 / Ⅰ-3) <span class="hint">(1桁 + のみ)</span></label>
+    <select id="complement">
+      <option value="any">指定なし</option>
+      <option value="le2">補数 ≤ 2 (相手が 8 か 9 / Ⅰ-2)</option>
+      <option value="ge3">補数 ≥ 3 (max ≤ 7 / Ⅰ-3)</option>
+    </select>
+
+    <label class="field">九九 段別 (Ⅱ-1〜Ⅱ-3) <span class="hint">(1桁 × のみ)</span></label>
+    <select id="multiplicandSet">
+      <option value="">指定なし</option>
+      <option value="2,3,5">低段 2・3・5 (Ⅱ-1)</option>
+      <option value="4,6">中段 4・6 (Ⅱ-2)</option>
+      <option value="7,8,9">高段 7・8・9 (Ⅱ-3)</option>
+    </select>
+
+    <label class="field">穴埋め (□) <span class="hint">(2項・整数のみ)</span></label>
+    <select id="placeholder">
+      <option value="none">通常 (□なし)</option>
+      <option value="left">□ が左 (□+5=8)</option>
+      <option value="right">□ が右・非対称 (15−□=8)</option>
+      <option value="result">□ が結果 (3+5=□)</option>
+      <option value="random">ランダム配置</option>
+    </select>
+
+    <label class="checkbox" style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+      <input type="checkbox" id="forceZeroDigit">
+      空位 (0 桁) を含む整数 (Ⅰ-9)
+    </label>
+
+    <label class="checkbox" style="display:flex; align-items:center; gap:6px;">
+      <input type="checkbox" id="factor10">
+      末尾ゼロの乗算 / あまり除算 (Ⅱ-6 / Ⅲ-11)
+    </label>
+
+    <label class="field">あまりクラス (Ⅲ-3 / Ⅲ-4) <span class="hint">(あまりあり除算のみ)</span></label>
+    <select id="remainderClass">
+      <option value="any">指定なし</option>
+      <option value="large">あまり大 (r ≥ b÷2 切上 / Ⅲ-3)</option>
+      <option value="max">あまり限界 (r = b−1 / Ⅲ-4)</option>
+    </select>
+
+    <div class="row">
+      <div>
+        <label class="field">問題数</label>
+        <input type="number" id="count" value="20" min="1" max="500">
+      </div>
+      <div>
+        <label class="field">シード <span class="hint">同じ値=同じ問題</span></label>
+        <input type="number" id="seed" value="1">
+      </div>
+    </div>
+
+    <label class="field">プリントのタイトル</label>
+    <input type="text" id="sheetTitle" value="算数プリント" style="width:100%; padding:9px 10px; font-size:16px; border:1px solid var(--border); border-radius:6px;">
+
+    <label class="field">印刷の文字サイズ <span class="hint">(1ページの問題数も連動)</span></label>
+    <select id="printSize">
+      <option value="l">大 — 18pt / 1ページ 20 問 (低学年・ゆったり)</option>
+      <option value="m" selected>中 — 13pt / 1ページ 40 問 (標準)</option>
+      <option value="s">小 — 11pt / 1ページ 60 問 (大量演習)</option>
+    </select>
+
+    <button class="primary" id="genBtn">生成する</button>
+    <div class="error" id="genError"></div>
+
+    <!-- L-037: 設定 JSON エクスポート / インポート -->
+    <details style="margin-top:14px;">
+      <summary style="cursor:pointer; color:var(--muted); font-size:13px;">設定を JSON で書き出す / 読み込む</summary>
+      <div style="margin-top:10px;">
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <button class="secondary" id="exportConfigBtn" type="button">現在の設定を書き出す ↓</button>
+          <button class="secondary" id="importConfigBtn" type="button">JSON から読み込む ↑</button>
+        </div>
+        <textarea id="configJson" rows="6"
+          placeholder="ここに JSON が出力されます。書き出す → 編集 → 読み込む の順で使えます。"
+          style="width:100%; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; padding:8px; border:1px solid var(--border); border-radius:6px; box-sizing:border-box;"></textarea>
+        <div class="error" id="configJsonError" style="margin-top:4px;"></div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- ═══════════ タブ2: 問題表示・印刷 ═══════════ -->
+<div class="tab-panel" id="tab-print">
+  <div class="actions no-print">
+    <button class="secondary" id="printBtn">🖨 印刷</button>
+    <button class="secondary" id="regenBtn">設定に戻る</button>
+  </div>
+  <div class="panel" id="printPanel">
+    <div class="empty">まだ問題がありません。「問題生成」タブで作成してください。</div>
+  </div>
+</div>
+
+<!-- ═══════════ タブ3: 解答 ═══════════ -->
+<div class="tab-panel" id="tab-answer">
+  <div class="actions no-print">
+    <button class="secondary" id="printAnswerBtn">🖨 解答を印刷</button>
+  </div>
+  <div class="panel" id="answerPanel">
+    <div class="empty">まだ問題がありません。「問題生成」タブで作成してください。</div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- すべてのロジックをここに埋め込む (file:// でも動作するよう ES modules を使わない) -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+"use strict";
+
+// ═══ Frac ═══════════════════════════════════════════════════════
+function gcd(a, b) {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b) { const t = a % b; a = b; b = t; }
+  return a || 1;
+}
+function Frac(num, den) {
+  if (den === undefined) den = 1;
+  if (!Number.isInteger(num) || !Number.isInteger(den)) {
+    throw new Error("Frac requires integers: " + num + "/" + den);
+  }
+  if (den === 0) throw new Error("Frac: division by zero");
+  if (den < 0) { num = -num; den = -den; }
+  const g = gcd(num, den);
+  this.n = num / g;
+  this.d = den / g;
+}
+Frac.from = function(x) { return x instanceof Frac ? x : new Frac(x); };
+Frac.prototype.add = function(o) { o = Frac.from(o); return new Frac(this.n*o.d + o.n*this.d, this.d*o.d); };
+Frac.prototype.sub = function(o) { o = Frac.from(o); return new Frac(this.n*o.d - o.n*this.d, this.d*o.d); };
+Frac.prototype.mul = function(o) { o = Frac.from(o); return new Frac(this.n*o.n, this.d*o.d); };
+Frac.prototype.div = function(o) {
+  o = Frac.from(o);
+  if (o.n === 0) throw new Error("Frac: divide by zero");
+  return new Frac(this.n*o.d, this.d*o.n);
+};
+Frac.prototype.eq = function(o) { o = Frac.from(o); return this.n === o.n && this.d === o.d; };
+Frac.prototype.isInt = function() { return this.d === 1; };
+Frac.prototype.isZero = function() { return this.n === 0; };
+Frac.prototype.sign = function() { return Math.sign(this.n); };
+Frac.prototype.toString = function() { return this.d === 1 ? String(this.n) : this.n + "/" + this.d; };
+
+// ═══ SeedRandom (xorshift32) ════════════════════════════════════
+function SeedRandom(seed) {
+  this.seed = (seed >>> 0) || 1;
+}
+SeedRandom.prototype.next = function() {
+  let x = this.seed;
+  x ^= x << 13; x >>>= 0;
+  x ^= x >>> 17;
+  x ^= x << 5;  x >>>= 0;
+  this.seed = x >>> 0;
+  return this.seed / 0xFFFFFFFF;
+};
+SeedRandom.prototype.int = function(min, max) {
+  return Math.floor(this.next() * (max - min + 1)) + min;
+};
+
+// ═══ Evaluator ══════════════════════════════════════════════════
+function num(value, display) {
+  const v = Frac.from(value);
+  return { type: "num", value: v, display: display != null ? display : v.toString() };
+}
+function op(o, left, right) {
+  return { type: "op", op: o, left: left, right: right };
+}
+const PREC = { "+": 1, "-": 1, "*": 2, "/": 2 };
+const SYM  = { "+": "+", "-": "−", "*": "×", "/": "÷" };
+
+function evalNode(node) {
+  if (node.type === "num") return node.value;
+  const L = evalNode(node.left);
+  const R = evalNode(node.right);
+  switch (node.op) {
+    case "+": return L.add(R);
+    case "-": return L.sub(R);
+    case "*": return L.mul(R);
+    case "/": return L.div(R);
+  }
+  throw new Error("unknown op: " + node.op);
+}
+function render(node, parentPrec) {
+  if (parentPrec == null) parentPrec = 0;
+  if (node.type === "num") return node.display;
+  const p = PREC[node.op];
+  const left  = render(node.left, p);
+  const right = render(node.right, p + 1);
+  const s = left + " " + SYM[node.op] + " " + right;
+  return p < parentPrec ? "(" + s + ")" : s;
+}
+function allNonNegative(node) {
+  if (node.type === "num") return node.value.sign() >= 0;
+  if (!allNonNegative(node.left))  return false;
+  if (!allNonNegative(node.right)) return false;
+  return evalNode(node).sign() >= 0;
+}
+function hasTrivial(node) {
+  if (node.type === "num") return false;
+  if (hasTrivial(node.left) || hasTrivial(node.right)) return true;
+  const one = new Frac(1);
+  const L = node.left, R = node.right;
+  const Lnum = L.type === "num" ? L.value : null;
+  const Rnum = R.type === "num" ? R.value : null;
+  if (node.op === "*") {
+    if (Lnum && (Lnum.isZero() || Lnum.eq(one))) return true;
+    if (Rnum && (Rnum.isZero() || Rnum.eq(one))) return true;
+  }
+  if (node.op === "/") {
+    if (Rnum && Rnum.eq(one))  return true;
+    if (Rnum && Rnum.isZero()) return true;
+    if (Lnum && Rnum && Lnum.eq(Rnum)) return true;
+  }
+  if (node.op === "+") {
+    if (Lnum && Lnum.isZero()) return true;
+    if (Rnum && Rnum.isZero()) return true;
+  }
+  if (node.op === "-") {
+    if (Rnum && Rnum.isZero()) return true;
+    if (Lnum && Rnum && Lnum.eq(Rnum)) return true;
+  }
+  return false;
+}
+
+// ═══ Number generators ══════════════════════════════════════════
+function genInteger(rng, digits) {
+  if (digits == null) digits = 1;
+  const min = digits === 1 ? 1 : Math.pow(10, digits - 1);
+  const max = Math.pow(10, digits) - 1;
+  const n = rng.int(min, max);
+  return { value: new Frac(n), display: String(n) };
+}
+function genDecimal1(rng, intMax) {
+  if (intMax == null) intMax = 9;
+  const i = rng.int(0, intMax);
+  const f = rng.int(1, 9);
+  const raw = i * 10 + f;
+  return { value: new Frac(raw, 10), display: i + "." + f };
+}
+// L-039: 小数第2位 (1.25, 0.07, 3.14)。第2位は必ず非ゼロ (1.20 を避ける)
+function genDecimal2(rng, intMax) {
+  if (intMax == null) intMax = 9;
+  const i = rng.int(0, intMax);
+  const tenths   = rng.int(0, 9);
+  const hundreds = rng.int(1, 9);
+  const f = tenths * 10 + hundreds;
+  const raw = i * 100 + f;
+  return { value: new Frac(raw, 100), display: i + "." + tenths + hundreds };
+}
+function genProperFraction(rng, options) {
+  // L-028: 第2引数は { den, denMax } のオブジェクト。後方互換で number 単体も受ける。
+  if (options == null) options = {};
+  if (typeof options === "number") options = { denMax: options };
+  const fixedDen = options.den;
+  const denMax = options.denMax == null ? 9 : options.denMax;
+  if (fixedDen != null) {
+    if (fixedDen < 2) {
+      const e = new Error("genProperFraction: den must be >= 2");
+      e.fatal = true; throw e;
+    }
+    for (let k = 0; k < 50; k++) {
+      const n = rng.int(1, fixedDen - 1);
+      const fr = new Frac(n, fixedDen);
+      if (fr.n === n && fr.d === fixedDen) {
+        return { value: fr, display: n + "/" + fixedDen };
+      }
+    }
+    return { value: new Frac(1, fixedDen), display: "1/" + fixedDen };
+  }
+  for (let k = 0; k < 50; k++) {
+    const d = rng.int(2, denMax);
+    const n = rng.int(1, d - 1);
+    const fr = new Frac(n, d);
+    if (fr.n === n && fr.d === d) {
+      return { value: fr, display: n + "/" + d };
+    }
+  }
+  return { value: new Frac(1, 2), display: "1/2" };
+}
+// 仮分数 (improper fraction): 分子 > 分母、既約
+function genImproperFraction(rng, options) {
+  if (options == null) options = {};
+  const fixedDen = options.den;
+  const denMax = options.denMax == null ? 9 : options.denMax;
+  if (fixedDen != null && fixedDen < 2) {
+    const e = new Error("genImproperFraction: den must be >= 2");
+    e.fatal = true; throw e;
+  }
+  for (let k = 0; k < 50; k++) {
+    const d = fixedDen != null ? fixedDen : rng.int(2, denMax);
+    const n = rng.int(d + 1, d * 4);
+    const fr = new Frac(n, d);
+    if (fr.n === n && fr.d === d) {
+      return { value: fr, display: n + "/" + d };
+    }
+  }
+  return { value: new Frac(3, 2), display: "3/2" };
+}
+// 帯分数 (mixed number): 整数 + 真分数。display は "N a/b"
+function genMixedNumber(rng, options) {
+  if (options == null) options = {};
+  const fixedDen = options.den;
+  const denMax = options.denMax == null ? 9 : options.denMax;
+  const intMax = options.intMax == null ? 5 : options.intMax;
+  if (fixedDen != null && fixedDen < 2) {
+    const e = new Error("genMixedNumber: den must be >= 2");
+    e.fatal = true; throw e;
+  }
+  for (let k = 0; k < 50; k++) {
+    const d = fixedDen != null ? fixedDen : rng.int(2, denMax);
+    const n = rng.int(1, d - 1);
+    const fr = new Frac(n, d);
+    if (fr.n !== n || fr.d !== d) continue;
+    const intPart = rng.int(1, intMax);
+    const totalN = intPart * d + n;
+    return { value: new Frac(totalN, d), display: intPart + " " + n + "/" + d };
+  }
+  return { value: new Frac(3, 2), display: "1 1/2" };
+}
+function genNumber(rng, types, config) {
+  const type = types[rng.int(0, types.length - 1)];
+  if (type === "integer") return genInteger(rng, config.digits);
+  if (type === "decimal1") return genDecimal1(rng, config.decimalIntMax);
+  if (type === "decimal2") return genDecimal2(rng, config.decimalIntMax);
+  if (type === "proper_fraction") return genProperFraction(rng, {
+    den: config.fractionDen, denMax: config.fractionDenMax
+  });
+  if (type === "improper_fraction") return genImproperFraction(rng, {
+    den: config.fractionDen, denMax: config.fractionDenMax
+  });
+  if (type === "mixed_number") return genMixedNumber(rng, {
+    den: config.fractionDen, denMax: config.fractionDenMax, intMax: config.mixedIntMax
+  });
+  throw new Error("unknown number type: " + type);
+}
+
+// ═══ Answer formatting ══════════════════════════════════════════
+function fracToDecimalString(frac, maxPlaces) {
+  if (maxPlaces == null) maxPlaces = 2;
+  if (frac.isInt()) return String(frac.n);
+  for (let p = 1; p <= maxPlaces; p++) {
+    const scale = Math.pow(10, p);
+    if (scale % frac.d === 0) {
+      const mul = scale / frac.d;
+      const whole = frac.n * mul;
+      const sign = whole < 0 ? "-" : "";
+      const abs = Math.abs(whole);
+      const intPart = Math.floor(abs / scale);
+      let fracPart = String(abs % scale).padStart(p, "0").replace(/0+$/, "");
+      if (fracPart === "") return sign + intPart;
+      return sign + intPart + "." + fracPart;
+    }
+  }
+  return null;
+}
+function formatAnswer(frac, mode) {
+  if (mode == null) mode = "auto";
+  if (mode === "int") {
+    if (!frac.isInt()) return null;
+    return { type: "int", value: frac.n, display: String(frac.n) };
+  }
+  if (mode === "decimal") {
+    const s = fracToDecimalString(frac, 2);
+    if (s === null) return null;
+    if (frac.isInt()) return { type: "int", value: frac.n, display: s };
+    return { type: "decimal", num: frac.n, den: frac.d, display: s };
+  }
+  if (mode === "fraction") {
+    if (frac.isInt()) return { type: "int", value: frac.n, display: String(frac.n) };
+    return { type: "frac", num: frac.n, den: frac.d, display: frac.toString() };
+  }
+  if (mode === "mixed") {
+    // L-035: 帯分数表記
+    if (frac.isInt()) return { type: "int", value: frac.n, display: String(frac.n) };
+    if (Math.abs(frac.n) < frac.d) {
+      return { type: "frac", num: frac.n, den: frac.d, display: frac.toString() };
+    }
+    const sign = frac.n < 0 ? -1 : 1;
+    const absN = Math.abs(frac.n);
+    const intPart = Math.floor(absN / frac.d);
+    const remN = absN - intPart * frac.d;
+    const signedInt = intPart * sign;
+    return {
+      type: "mixed",
+      intPart: signedInt,
+      num: remN,
+      den: frac.d,
+      display: signedInt + " " + remN + "/" + frac.d
+    };
+  }
+  // auto
+  if (frac.isInt()) return { type: "int", value: frac.n, display: String(frac.n) };
+  const dec = fracToDecimalString(frac, 2);
+  if (dec !== null) return { type: "decimal", num: frac.n, den: frac.d, display: dec };
+  return { type: "frac", num: frac.n, den: frac.d, display: frac.toString() };
+}
+function buildProblem(type, expr, answerMode) {
+  const answerFrac = evalNode(expr);
+  const answer = formatAnswer(answerFrac, answerMode);
+  if (answer === null) return null;
+  return {
+    type: type,
+    expr: expr,
+    question: render(expr) + " =",
+    answer: answer
+  };
+}
+
+// ═══ Arithmetic plugin ══════════════════════════════════════════
+const ALL_OPS = ["+", "-", "*", "/"];
+function buildLeftAssoc(nums, ops) {
+  let tree = nums[0];
+  for (let i = 0; i < ops.length; i++) tree = op(ops[i], tree, nums[i+1]);
+  return tree;
+}
+function buildRightAssoc(nums, ops) {
+  let tree = nums[nums.length-1];
+  for (let i = ops.length-1; i >= 0; i--) tree = op(ops[i], nums[i], tree);
+  return tree;
+}
+function hasZeroDivision(node) {
+  if (node.type === "num") return false;
+  if (hasZeroDivision(node.left) || hasZeroDivision(node.right)) return true;
+  if (node.op === "/") {
+    try { if (evalNode(node.right).isZero()) return true; }
+    catch(_) { return true; }
+  }
+  return false;
+}
+// L-036: 繰り上がり / 繰り下がり判定 (column-wise、整数のみ)
+function additionHasCarry(a, b) {
+  while (a > 0 || b > 0) {
+    if ((a % 10) + (b % 10) >= 10) return true;
+    a = Math.floor(a / 10);
+    b = Math.floor(b / 10);
+  }
+  return false;
+}
+function subtractionHasBorrow(a, b) {
+  while (b > 0) {
+    if ((a % 10) < (b % 10)) return true;
+    a = Math.floor(a / 10);
+    b = Math.floor(b / 10);
+  }
+  return false;
+}
+function computeCarryStatus(node) {
+  let any = false;
+  function walk(n) {
+    if (n.type !== "op") return;
+    walk(n.left); walk(n.right);
+    if (n.op !== "+" && n.op !== "-") return;
+    const lv = evalNode(n.left), rv = evalNode(n.right);
+    if (!lv.isInt() || !rv.isInt()) return;
+    const has = n.op === "+"
+      ? additionHasCarry(lv.n, rv.n)
+      : subtractionHasBorrow(lv.n, rv.n);
+    if (has) any = true;
+  }
+  walk(node);
+  return any;
+}
+// L-046: 全桁 carry/borrow ヘルパー (Ⅰ-4 / Ⅰ-8)
+function additionAllColsCarry(a, b) {
+  if (a < 10 || b < 10) return false;
+  let carryIn = 0, count = 0;
+  for (let pos = 0; pos < 2; pos++) {
+    const sum = (a % 10) + (b % 10) + carryIn;
+    if (sum < 10) return false;
+    count++;
+    carryIn = 1;
+    a = Math.floor(a / 10);
+    b = Math.floor(b / 10);
+  }
+  return count >= 2;
+}
+function subtractionAllColsBorrow(a, b) {
+  if (b < 10) return false;
+  let borrowIn = 0, count = 0;
+  let ai = a, bi = b;
+  for (let pos = 0; pos < 2; pos++) {
+    const da = ai % 10, db = bi % 10;
+    if (da - borrowIn >= db) return false;
+    count++;
+    borrowIn = 1;
+    ai = Math.floor(ai / 10);
+    bi = Math.floor(bi / 10);
+  }
+  return count >= 2;
+}
+function computeAllColsCarryStatus(node) {
+  let allOk = true;
+  let count = 0;
+  function walk(n) {
+    if (n.type !== "op") return;
+    walk(n.left); walk(n.right);
+    if (n.op !== "+" && n.op !== "-") return;
+    const lv = evalNode(n.left), rv = evalNode(n.right);
+    if (!lv.isInt() || !rv.isInt()) { allOk = false; return; }
+    count++;
+    const ok = n.op === "+"
+      ? additionAllColsCarry(lv.n, rv.n)
+      : subtractionAllColsBorrow(lv.n, rv.n);
+    if (!ok) allOk = false;
+  }
+  walk(node);
+  return count > 0 && allOk;
+}
+// L-046: 整数に 0 桁が含まれるか (Ⅰ-9 空位)
+function intHasZeroDigit(n) {
+  if (n < 10) return false;
+  while (n > 0) {
+    if (n % 10 === 0) return true;
+    n = Math.floor(n / 10);
+  }
+  return false;
+}
+function treeHasZeroDigitOperand(node) {
+  let found = false;
+  function walk(n) {
+    if (found) return;
+    if (n.type === "num") {
+      if (n.value.isInt() && intHasZeroDigit(n.value.n)) found = true;
+      return;
+    }
+    walk(n.left); walk(n.right);
+  }
+  walk(node);
+  return found;
+}
+// L-046: 全 × ノードで「片方が 10 の倍数」(Ⅱ-6 末尾ゼロの乗算)
+function treeAllMulFactor10(node) {
+  let ok = true;
+  let mulCount = 0;
+  function walk(n) {
+    if (!ok || n.type !== "op") return;
+    walk(n.left); walk(n.right);
+    if (n.op !== "*") return;
+    mulCount++;
+    const lv = evalNode(n.left), rv = evalNode(n.right);
+    if (!lv.isInt() || !rv.isInt()) { ok = false; return; }
+    const lz = lv.n % 10 === 0 && lv.n >= 10;
+    const rz = rv.n % 10 === 0 && rv.n >= 10;
+    if (!(lz || rz)) ok = false;
+  }
+  walk(node);
+  return mulCount > 0 && ok;
+}
+function arithmeticGenerate(config, rng) {
+  const terms       = config.terms || 2;
+  const ops         = (config.ops || ALL_OPS).filter(function(o){ return ALL_OPS.indexOf(o) >= 0; });
+  const numberTypes = config.numberTypes || ["integer"];
+  const digits      = config.digits || 1;
+  const allowParens = config.allowParens !== false;
+
+  if (ops.length === 0) {
+    const e = new Error("arithmetic: ops is empty");
+    e.fatal = true; throw e;
+  }
+  if (terms < 2 || terms > 3) {
+    const e = new Error("arithmetic: terms must be 2 or 3");
+    e.fatal = true; throw e;
+  }
+  // L-024 / L-033: 小数/分数 + ×/÷ の取り扱い
+  //   (a) 小数/分数 + ÷ → 未対応
+  //   (b) 小数/分数のみ + × → 未対応 (integer 救済が必要)
+  //   (c) 小数/分数 + 整数 + × → OK。× 位置の左右どちらかを必ず integer に
+  const isNonIntType = function(t){ return t !== "integer"; };
+  const hasNonInt = numberTypes.some(isNonIntType);
+  const hasInt    = numberTypes.indexOf("integer") >= 0;
+  const opsHaveDiv = ops.indexOf("/") >= 0;
+  const opsHaveMul = ops.indexOf("*") >= 0;
+  if (hasNonInt && opsHaveDiv) {
+    const e = new Error(
+      "arithmetic: 小数/分数 と ÷ の組み合わせは未対応です " +
+      "(numberTypes=" + JSON.stringify(numberTypes) + ", ops=" + JSON.stringify(ops) + ")"
+    );
+    e.fatal = true; throw e;
+  }
+  if (hasNonInt && opsHaveMul && !hasInt) {
+    const e = new Error(
+      "arithmetic: 小数/分数のみで × を使うのは未対応です。integer も含めてください " +
+      "(numberTypes=" + JSON.stringify(numberTypes) + ", ops=" + JSON.stringify(ops) + ")"
+    );
+    e.fatal = true; throw e;
+  }
+  // L-036 / L-046: 繰り上がり/繰り下がり制御
+  const carry = config.carry || "any";
+  const CARRY_MODES = ["any", "with", "without", "all"];
+  if (CARRY_MODES.indexOf(carry) < 0) {
+    const e = new Error('arithmetic: carry は ' + JSON.stringify(CARRY_MODES) + ' のいずれか (got ' + JSON.stringify(carry) + ')');
+    e.fatal = true; throw e;
+  }
+  if (carry !== "any" && hasNonInt) {
+    const e = new Error(
+      "arithmetic: 繰り上がり/繰り下がり制御 (carry) は整数のみで使えます " +
+      "(numberTypes=" + JSON.stringify(numberTypes) + ")"
+    );
+    e.fatal = true; throw e;
+  }
+  if (carry === "all" && digits < 2) {
+    const e = new Error("arithmetic: carry='all' は digits>=2 のみ対応 (Ⅰ-4 / Ⅰ-8)");
+    e.fatal = true; throw e;
+  }
+  // L-046: forceZeroDigit (Ⅰ-9)
+  const forceZeroDigit = !!config.forceZeroDigit;
+  if (forceZeroDigit && hasNonInt) {
+    const e = new Error("arithmetic: forceZeroDigit は整数のみ対応");
+    e.fatal = true; throw e;
+  }
+  if (forceZeroDigit && digits < 2) {
+    const e = new Error("arithmetic: forceZeroDigit は digits>=2 のみ対応");
+    e.fatal = true; throw e;
+  }
+  // L-046: factor10 (Ⅱ-6 末尾ゼロの乗算)
+  const factor10 = !!config.factor10;
+  if (factor10) {
+    if (hasNonInt) {
+      const e = new Error("arithmetic: factor10 は整数のみ対応");
+      e.fatal = true; throw e;
+    }
+    if (ops.indexOf("*") < 0) {
+      const e = new Error("arithmetic: factor10 は ops に '*' を含む時のみ有効");
+      e.fatal = true; throw e;
+    }
+    if (digits < 2) {
+      const e = new Error("arithmetic: factor10 は digits>=2 のみ対応");
+      e.fatal = true; throw e;
+    }
+  }
+  // L-045: 補数フィルタ (Ⅰ-2 / Ⅰ-3)
+  const complement = config.complement || "any";
+  const COMPLEMENT_MODES = ["any", "le2", "ge3"];
+  if (COMPLEMENT_MODES.indexOf(complement) < 0) {
+    const e = new Error('arithmetic: complement は ' + JSON.stringify(COMPLEMENT_MODES) + ' のいずれか (got ' + JSON.stringify(complement) + ')');
+    e.fatal = true; throw e;
+  }
+  if (complement !== "any") {
+    if (digits !== 1) {
+      const e = new Error("arithmetic: complement フィルタは digits=1 のみ対応");
+      e.fatal = true; throw e;
+    }
+    if (ops.indexOf("+") < 0 || ops.some(function(o){ return o !== "+"; })) {
+      const e = new Error("arithmetic: complement フィルタは ops=['+'] のみ対応");
+      e.fatal = true; throw e;
+    }
+    if (hasNonInt) {
+      const e = new Error("arithmetic: complement フィルタは整数のみ対応");
+      e.fatal = true; throw e;
+    }
+  }
+  // L-045: 九九段別 (Ⅱ-1 / Ⅱ-2 / Ⅱ-3)
+  const multiplicandSet = config.multiplicandSet || null;
+  if (multiplicandSet !== null) {
+    if (!Array.isArray(multiplicandSet) || multiplicandSet.length === 0
+        || !multiplicandSet.every(function(x){ return Number.isInteger(x) && x >= 1 && x <= 9; })) {
+      const e = new Error("arithmetic: multiplicandSet は 1〜9 の整数の非空配列");
+      e.fatal = true; throw e;
+    }
+    if (ops.indexOf("*") < 0) {
+      const e = new Error("arithmetic: multiplicandSet は ops に '*' を含む時のみ有効");
+      e.fatal = true; throw e;
+    }
+    if (digits !== 1) {
+      const e = new Error("arithmetic: multiplicandSet は digits=1 のみ対応 (九九)");
+      e.fatal = true; throw e;
+    }
+  }
+  // L-038: 穴埋め (□ プレースホルダ) — L1 (2項・整数のみ)
+  const placeholder = config.placeholder || "none";
+  const PLACEHOLDER_SLOTS = ["none", "left", "right", "result", "random"];
+  if (PLACEHOLDER_SLOTS.indexOf(placeholder) < 0) {
+    const e = new Error(
+      "arithmetic: placeholder は " + JSON.stringify(PLACEHOLDER_SLOTS) +
+      " のいずれか (got " + JSON.stringify(placeholder) + ")"
+    );
+    e.fatal = true; throw e;
+  }
+  if (placeholder !== "none") {
+    if (terms !== 2) {
+      const e = new Error("arithmetic: placeholder は terms=2 のみ対応 (L1 スコープ)");
+      e.fatal = true; throw e;
+    }
+    if (hasNonInt) {
+      const e = new Error("arithmetic: placeholder は整数のみ対応 (L1 スコープ)");
+      e.fatal = true; throw e;
+    }
+  }
+
+  // 帯分数があれば mixed、他の分数 → fraction、小数 → decimal、それ以外 → int
+  const FRACTION_TYPES = ["proper_fraction", "improper_fraction", "mixed_number"];
+  const answerMode = config.answerMode || (
+    numberTypes.indexOf("mixed_number") >= 0 ? "mixed" :
+    numberTypes.some(function(t){ return FRACTION_TYPES.indexOf(t) >= 0; }) ? "fraction" :
+    (numberTypes.indexOf("decimal1") >= 0 || numberTypes.indexOf("decimal2") >= 0) ? "decimal" :
+                                           "int"
+  );
+
+  const opSeq = [];
+  for (let i = 0; i < terms - 1; i++) opSeq.push(ops[rng.int(0, ops.length - 1)]);
+
+  const hasDivInSeq = opSeq.some(function(o){ return o === "/"; });
+  const baseTypes = hasDivInSeq ? ["integer"] : numberTypes;
+
+  // 各オペランド位置の型を選ぶ
+  const opTypes = [];
+  for (let i = 0; i < terms; i++) {
+    opTypes.push(baseTypes[rng.int(0, baseTypes.length - 1)]);
+  }
+  // L-033: × 位置の制約 — 左右どちらかが必ず integer
+  for (let i = 0; i < opSeq.length; i++) {
+    if (opSeq[i] !== "*") continue;
+    const li = i, ri = i + 1;
+    if (isNonIntType(opTypes[li]) && isNonIntType(opTypes[ri])) {
+      if (rng.int(0, 1) === 0) opTypes[li] = "integer";
+      else                     opTypes[ri] = "integer";
+    }
+  }
+
+  const nums = [];
+  // L-028: 数生成器に config を全て転送
+  const numGenConfig = {
+    digits: digits,
+    decimalIntMax:  config.decimalIntMax,
+    fractionDen:    config.fractionDen,
+    fractionDenMax: config.fractionDenMax,
+    mixedIntMax:    config.mixedIntMax
+  };
+  for (let i = 0; i < terms; i++) {
+    const n = genNumber(rng, [opTypes[i]], numGenConfig);
+    nums.push(num(n.value, n.display));
+  }
+
+  // 除算: 位置0のみ、被除数を digits 範囲に収める
+  for (let i = 0; i < opSeq.length; i++) {
+    if (opSeq[i] === "/") {
+      if (i !== 0) return null;
+      const divisor = nums[i+1].value;
+      if (divisor.isZero()) return null;
+      const d = divisor.n;
+      const max = Math.pow(10, digits) - 1;
+      const min = digits === 1 ? 1 : Math.pow(10, digits - 1);
+      const qMin = Math.max(2, Math.ceil(min / d));
+      const qMax = Math.floor(max / d);
+      if (qMax < qMin) return null;
+      const q = rng.int(qMin, qMax);
+      const a = d * q;
+      nums[0] = num(a, String(a));
+    }
+  }
+
+  // 木を構築
+  let tree;
+  if (terms === 2 || !allowParens) {
+    tree = buildLeftAssoc(nums, opSeq);
+  } else {
+    const L = buildLeftAssoc(nums, opSeq);
+    const R = buildRightAssoc(nums, opSeq);
+    try {
+      const lv = evalNode(L);
+      const rv = evalNode(R);
+      if (!lv.eq(rv) && rng.int(0, 1) === 0) tree = R;
+      else tree = L;
+    } catch(_) { tree = L; }
+  }
+
+  if (hasZeroDivision(tree)) return null;
+  if (hasTrivial(tree))      return null;
+  if (!allNonNegative(tree)) return null;
+
+  // L-036 / L-046: carry/borrow フィルタ
+  if (carry !== "any") {
+    const hasAddSub = (function check(n) {
+      if (n.type !== "op") return false;
+      if (n.op === "+" || n.op === "-") return true;
+      return check(n.left) || check(n.right);
+    })(tree);
+    if (!hasAddSub) return null;
+    if (carry === "all") {
+      if (!computeAllColsCarryStatus(tree)) return null;
+    } else {
+      const has = computeCarryStatus(tree);
+      if (carry === "with"    && !has) return null;
+      if (carry === "without" &&  has) return null;
+    }
+  }
+
+  // L-046: forceZeroDigit (Ⅰ-9)
+  if (forceZeroDigit && !treeHasZeroDigitOperand(tree)) return null;
+
+  // L-046: factor10 (Ⅱ-6)
+  if (factor10 && !treeAllMulFactor10(tree)) return null;
+
+  // L-045: 補数フィルタ (1桁 + 限定なので tree は単一の + ノード)
+  if (complement !== "any") {
+    if (tree.type !== "op" || tree.op !== "+") return null;
+    const lv = evalNode(tree.left), rv = evalNode(tree.right);
+    if (!lv.isInt() || !rv.isInt()) return null;
+    const a = lv.n, b = rv.n;
+    if (a + b < 10) return null;
+    const mx = Math.max(a, b);
+    if (complement === "le2" && !(mx === 8 || mx === 9)) return null;
+    if (complement === "ge3" && mx > 7) return null;
+  }
+
+  // L-045: 九九段別フィルタ
+  if (multiplicandSet !== null) {
+    const setObj = {};
+    for (let mi = 0; mi < multiplicandSet.length; mi++) setObj[multiplicandSet[mi]] = true;
+    let ok = true;
+    (function walk(n) {
+      if (!ok || n.type !== "op") return;
+      walk(n.left); walk(n.right);
+      if (n.op !== "*") return;
+      const lv = evalNode(n.left), rv = evalNode(n.right);
+      if (!lv.isInt() || !rv.isInt()) { ok = false; return; }
+      if (!(setObj[lv.n] || setObj[rv.n])) ok = false;
+    })(tree);
+    if (!ok) return null;
+  }
+
+  const problem = buildProblem("arithmetic", tree, answerMode);
+  if (problem === null) return null;
+
+  // L-038: placeholder substitution (L1: 2項のみ)
+  if (placeholder === "none") return problem;
+  let slot = placeholder;
+  if (placeholder === "random") {
+    const slots = ["left", "right", "result"];
+    slot = slots[rng.int(0, 2)];
+  }
+  const SYM_DISPLAY = { "+": "+", "-": "−", "*": "×", "/": "÷" };
+  const lDisp = tree.left.display;
+  const rDisp = tree.right.display;
+  const opSym = SYM_DISPLAY[tree.op];
+  const resultFrac = evalNode(tree);
+  const resultAns  = formatAnswer(resultFrac, answerMode);
+  if (resultAns === null) return null;
+  const resultDisp = resultAns.display;
+
+  let invQuestion, invAnswer;
+  if (slot === "left") {
+    invQuestion = "□ " + opSym + " " + rDisp + " = " + resultDisp;
+    invAnswer   = formatAnswer(tree.left.value, answerMode);
+  } else if (slot === "right") {
+    invQuestion = lDisp + " " + opSym + " □ = " + resultDisp;
+    invAnswer   = formatAnswer(tree.right.value, answerMode);
+  } else { // result
+    invQuestion = lDisp + " " + opSym + " " + rDisp + " = □";
+    invAnswer   = resultAns;
+  }
+  if (invAnswer === null) return null;
+  return {
+    type: "arithmetic",
+    expr: tree,
+    question: invQuestion,
+    answer: invAnswer,
+    placeholder: { slot: slot }
+  };
+}
+
+// ═══ Remainder division plugin ══════════════════════════════════
+function remainderGenerate(config, rng) {
+  const divisorMax  = Math.max(2, config.divisorMax  || 9);
+  const quotientMax = Math.max(1, config.quotientMax || 9);
+  const notation    = config.notation || "amari";
+  // L-046: remainderClass / factor10
+  const remainderClass = config.remainderClass || "any";
+  const factor10 = !!config.factor10;
+  const REM_CLASSES = ["any", "large", "max"];
+  if (REM_CLASSES.indexOf(remainderClass) < 0) {
+    const e = new Error('remainder: remainderClass は ' + JSON.stringify(REM_CLASSES) + ' のいずれか');
+    e.fatal = true; throw e;
+  }
+  if (remainderClass !== "any" && divisorMax < 3) {
+    const e = new Error('remainder: remainderClass フィルタは divisorMax>=3 が必要');
+    e.fatal = true; throw e;
+  }
+
+  const b = rng.int(2, divisorMax);
+  const q = rng.int(1, quotientMax);
+  let r;
+  if (remainderClass === "max") {
+    r = b - 1;
+    if (r < 1) return null;
+  } else if (remainderClass === "large") {
+    const rMin = Math.ceil(b / 2);
+    if (rMin > b - 1) return null;
+    r = rng.int(rMin, b - 1);
+  } else {
+    r = rng.int(1, b - 1);
+  }
+  const a = b * q + r;
+
+  const bDisp = factor10 ? b * 10 : b;
+  const aDisp = factor10 ? a * 10 : a;
+  const rDisp = factor10 ? r * 10 : r;
+
+  const expr = op("/", num(aDisp), num(bDisp));
+  const sep = notation === "dots" ? "⋯" : "あまり";
+
+  return {
+    type: "remainder_division",
+    expr: expr,
+    question: aDisp + " ÷ " + bDisp + " =",
+    answer: {
+      type: "remainder",
+      quotient: q,
+      remainder: rDisp,
+      display: q + " " + sep + " " + rDisp
+    },
+    meta: { dividend: aDisp, divisor: bDisp }
+  };
+}
+
+// ═══ Registry & Generator ═══════════════════════════════════════
+const registry = {
+  "arithmetic": arithmeticGenerate,
+  "remainder_division": remainderGenerate
+};
+const MAX_RETRY = 200;
+function isValid(problem) {
+  if (!problem || !problem.answer) return false;
+  const d = problem.answer.display;
+  if (typeof d !== "string") return false;
+  return d !== "NaN" && d !== "Infinity" && d !== "-Infinity" && d.indexOf("NaN") < 0;
+}
+function keyOf(p) { return p.type + ":" + p.question; }
+
+function generateSheet(config) {
+  const count   = config.count || 10;
+  const types   = config.types || ["arithmetic"];
+  const seed    = config.seed  || 1;
+  const allowDup = !!config.allowDuplicates;
+
+  for (let i = 0; i < types.length; i++) {
+    if (!registry[types[i]]) throw new Error("Unknown problem type: " + types[i]);
+  }
+
+  const rng = new SeedRandom(seed);
+  const problems = [];
+  const seen = {};
+  let totalRetries = 0;
+
+  while (problems.length < count) {
+    let p = null;
+    let attempts = 0;
+    while (attempts < MAX_RETRY) {
+      const type = types[rng.int(0, types.length - 1)];
+      let candidate;
+      try { candidate = registry[type](config, rng); }
+      catch(e) {
+        if (e && e.fatal) throw e; // L-024: 設定エラーは即時失敗
+        attempts++; continue;
+      }
+      if (!isValid(candidate)) { attempts++; continue; }
+      if (!allowDup && seen[keyOf(candidate)]) { attempts++; continue; }
+      p = candidate; break;
+    }
+    totalRetries += attempts;
+    if (!p) {
+      throw new Error("生成失敗: " + MAX_RETRY + "回試行しても条件を満たす問題を作れませんでした。" +
+        "設定をゆるめるか、問題数を減らしてください。");
+    }
+    seen[keyOf(p)] = true;
+    problems.push(p);
+  }
+
+  return { problems: problems, meta: { seed: seed, totalRetries: totalRetries } };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI ロジック
+// ═══════════════════════════════════════════════════════════════
+const $ = function(id) { return document.getElementById(id); };
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+  });
+}
+
+// 分数 "a/b" を <span class="frac"> に、演算子 + − × ÷ を <span class="op"> に変換し、
+// "= 答え" は <span class="eq-group"> で 1つの分割不能アイテムとして包む。
+// L-029 / L-030: 一列に収まるなら一列、収まらないときだけ "= 答え" ごと次行へ送る。
+function renderMath(str) {
+  const s = String(str);
+  const tokens = [];
+  // ①-a 帯分数 "N a/b" を先にプレースホルダ化
+  //   後段の "a/b" 抽出より前にやらないと、フラクション部分だけ抽出されてしまう。
+  let work = s.replace(/(\d+) (\d+)\/(\d+)/g, function(_, intPart, n, d) {
+    const idx = tokens.length;
+    tokens.push(
+      '<span class="mixed">' +
+        '<span class="m-int">' + escapeHtml(intPart) + '</span>' +
+        '<span class="frac">' +
+          '<span class="f-n">' + escapeHtml(n) + '</span>' +
+          '<span class="f-d">' + escapeHtml(d) + '</span>' +
+        '</span>' +
+      '</span>'
+    );
+    return "\u0001" + idx + "\u0001";
+  });
+  // ①-b 残りの分数 "a/b" をプレースホルダ化
+  work = work.replace(/(\d+)\/(\d+)/g, function(_, n, d) {
+    const idx = tokens.length;
+    tokens.push(
+      '<span class="frac">' +
+        '<span class="f-n">' + escapeHtml(n) + '</span>' +
+        '<span class="f-d">' + escapeHtml(d) + '</span>' +
+      '</span>'
+    );
+    return "\u0001" + idx + "\u0001";
+  });
+  // ② エスケープ
+  work = escapeHtml(work);
+  // ③ "=" で分割
+  const eqIdx = work.indexOf("=");
+  let html;
+  if (eqIdx < 0) {
+    html = wrapOps(work);
+  } else {
+    const lhs = work.slice(0, eqIdx).replace(/\s+$/, "");
+    const rhs = work.slice(eqIdx + 1).replace(/^\s+/, "");
+    const lhsHtml = wrapOps(lhs);
+    if (rhs.length === 0) {
+      // bare "=" (問題パネル)
+      html = lhsHtml + '<span class="op op-eq">=</span>';
+    } else {
+      // "= 答え" (解答パネル) → eq-group で分割不能にする
+      html = lhsHtml +
+        '<span class="eq-group">' +
+          '<span class="op op-eq">=</span>' +
+          wrapOps(rhs) +
+        '</span>';
+    }
+  }
+  // ④ プレースホルダ復元
+  html = html.replace(/\u0001(\d+)\u0001/g, function(_, i) { return tokens[Number(i)]; });
+  return html;
+}
+// 演算子 (= 以外) を span でラップ。前後スペースを食う。
+function wrapOps(s) {
+  return s.replace(/ ?([+\-−×÷]) ?/g, '<span class="op">$1</span>');
+}
+
+// 問題文に答えを付加した「完成式」を作る
+// 問題文は "<expr> =" で終わる前提なので、末尾に答えを足すだけ
+// - 通常: "3 + 5 ="          → "3 + 5 = 8"
+// - 分数: "1/2 + 1/3 ="      → "1/2 + 1/3 = 5/6"
+// - 剰余: "17 ÷ 5 ="         → "17 ÷ 5 = 3 あまり 2"
+function buildAnsweredLine(p) {
+  return p.question + " " + p.answer.display;
+}
+
+// チップのトグル
+function wireChips(containerId) {
+  const chips = document.querySelectorAll("#" + containerId + " .chip");
+  chips.forEach(function(el) {
+    el.addEventListener("click", function() { el.classList.toggle("on"); });
+  });
+}
+wireChips("ops");
+wireChips("numberTypes");
+
+// タブ切替
+const tabButtons = document.querySelectorAll(".tab-btn");
+const tabPanels  = document.querySelectorAll(".tab-panel");
+function switchTab(name) {
+  tabButtons.forEach(function(b) {
+    b.classList.toggle("active", b.dataset.tab === name);
+  });
+  tabPanels.forEach(function(p) {
+    p.classList.toggle("active", p.id === "tab-" + name);
+    p.classList.remove("print-target");
+  });
+}
+tabButtons.forEach(function(b) {
+  b.addEventListener("click", function() {
+    if (b.disabled) return;
+    switchTab(b.dataset.tab);
+  });
+});
+
+// 現在の問題セットを保持
+let currentProblems = null;
+let currentMeta     = null;
+let currentTitle    = "";
+
+// 生成処理
+// L-037: UI ↔ config の双方向バインディング
+function readUIConfig() {
+  const ops = [].slice.call(document.querySelectorAll("#ops .chip.on"))
+                 .map(function(el) { return el.dataset.op; });
+  let numberTypes = [].slice.call(document.querySelectorAll("#numberTypes .chip.on"))
+                 .map(function(el) { return el.dataset.nt; });
+  if (numberTypes.length === 0) numberTypes = ["integer"];
+
+  const fractionDenRaw    = $("fractionDen").value;
+  const fractionDenMaxRaw = $("fractionDenMax").value;
+  const fractionDen    = fractionDenRaw    ? Number(fractionDenRaw)    : undefined;
+  const fractionDenMax = fractionDenMaxRaw ? Number(fractionDenMaxRaw) : undefined;
+
+  const useRemainder = $("useRemainder").checked;
+  const types = ["arithmetic"];
+  if (useRemainder) types.push("remainder_division");
+
+  // L-045: 九九段別 select は "2,3,5" のような CSV 文字列。空なら null。
+  const multiplicandSetRaw = $("multiplicandSet") ? $("multiplicandSet").value : "";
+  let multiplicandSet = null;
+  if (multiplicandSetRaw) {
+    multiplicandSet = multiplicandSetRaw.split(",").map(function(s) { return Number(s); });
+  }
+
+  const cfg = {
+    count: Number($("count").value) || 20,
+    types: types,
+    seed:  Number($("seed").value) || 1,
+    terms: Number($("terms").value) || 2,
+    digits: Number($("digits").value) || 2,
+    ops: ops,
+    numberTypes: numberTypes,
+    carry: $("carry").value || "any",
+    complement: $("complement") ? ($("complement").value || "any") : "any",
+    placeholder: $("placeholder").value || "none",
+    forceZeroDigit: $("forceZeroDigit") ? !!$("forceZeroDigit").checked : false,
+    factor10: $("factor10") ? !!$("factor10").checked : false,
+    remainderClass: $("remainderClass") ? ($("remainderClass").value || "any") : "any",
+    printSize: $("printSize") ? ($("printSize").value || "m") : "m",
+    allowDuplicates: true,
+    title: $("sheetTitle").value || "算数プリント",
+  };
+  if (fractionDen    !== undefined) cfg.fractionDen    = fractionDen;
+  if (fractionDenMax !== undefined) cfg.fractionDenMax = fractionDenMax;
+  if (multiplicandSet !== null)     cfg.multiplicandSet = multiplicandSet;
+  return cfg;
+}
+
+function applyUIConfig(cfg) {
+  if (!cfg || typeof cfg !== "object") throw new Error("config object ではありません");
+  // 数値系
+  if (cfg.count  != null) $("count").value  = String(cfg.count);
+  if (cfg.seed   != null) $("seed").value   = String(cfg.seed);
+  if (cfg.terms  != null) $("terms").value  = String(cfg.terms);
+  if (cfg.digits != null) $("digits").value = String(cfg.digits);
+  if (typeof cfg.title === "string") $("sheetTitle").value = cfg.title;
+  // remainder
+  if (Array.isArray(cfg.types)) {
+    $("useRemainder").checked = cfg.types.indexOf("remainder_division") >= 0;
+  }
+  // chips
+  if (Array.isArray(cfg.ops)) {
+    [].slice.call(document.querySelectorAll("#ops .chip")).forEach(function(el) {
+      el.classList.toggle("on", cfg.ops.indexOf(el.dataset.op) >= 0);
+    });
+  }
+  if (Array.isArray(cfg.numberTypes)) {
+    [].slice.call(document.querySelectorAll("#numberTypes .chip")).forEach(function(el) {
+      el.classList.toggle("on", cfg.numberTypes.indexOf(el.dataset.nt) >= 0);
+    });
+  }
+  // 真分数オプション
+  $("fractionDen").value    = cfg.fractionDen    != null ? String(cfg.fractionDen)    : "";
+  $("fractionDenMax").value = cfg.fractionDenMax != null ? String(cfg.fractionDenMax) : "";
+  // carry
+  $("carry").value = cfg.carry || "any";
+  // L-045: complement / multiplicandSet
+  if ($("complement")) $("complement").value = cfg.complement || "any";
+  if ($("multiplicandSet")) {
+    $("multiplicandSet").value = Array.isArray(cfg.multiplicandSet) ? cfg.multiplicandSet.join(",") : "";
+  }
+  // placeholder (L-038)
+  $("placeholder").value = cfg.placeholder || "none";
+  // L-046: forceZeroDigit / factor10 / remainderClass
+  if ($("forceZeroDigit")) $("forceZeroDigit").checked = !!cfg.forceZeroDigit;
+  if ($("factor10"))       $("factor10").checked       = !!cfg.factor10;
+  if ($("remainderClass")) $("remainderClass").value   = cfg.remainderClass || "any";
+  // printSize (L-041)
+  if ($("printSize") && cfg.printSize) $("printSize").value = cfg.printSize;
+}
+
+$("exportConfigBtn").addEventListener("click", function() {
+  $("configJsonError").textContent = "";
+  try {
+    const cfg = readUIConfig();
+    $("configJson").value = JSON.stringify(cfg, null, 2);
+  } catch (e) {
+    $("configJsonError").textContent = "書き出し失敗: " + e.message;
+  }
+});
+$("importConfigBtn").addEventListener("click", function() {
+  $("configJsonError").textContent = "";
+  const text = $("configJson").value.trim();
+  if (!text) {
+    $("configJsonError").textContent = "JSON を貼り付けてください。";
+    return;
+  }
+  let cfg;
+  try { cfg = JSON.parse(text); }
+  catch (e) {
+    $("configJsonError").textContent = "JSON 解析失敗: " + e.message;
+    return;
+  }
+  try { applyUIConfig(cfg); }
+  catch (e) {
+    $("configJsonError").textContent = "適用失敗: " + e.message;
+    return;
+  }
+  $("configJsonError").style.color = "var(--muted)";
+  $("configJsonError").textContent = "読み込み完了。";
+  setTimeout(function() {
+    $("configJsonError").textContent = "";
+    $("configJsonError").style.color = "";
+  }, 2000);
+});
+
+$("genBtn").addEventListener("click", function() {
+  $("genError").textContent = "";
+
+  const cfg = readUIConfig();
+  if (!cfg.ops || cfg.ops.length === 0) {
+    $("genError").textContent = "演算子を1つ以上選んでください。";
+    return;
+  }
+  currentTitle = cfg.title || "算数プリント";
+
+  let result;
+  try {
+    result = generateSheet(cfg);
+  } catch (e) {
+    $("genError").textContent = "生成失敗: " + e.message;
+    return;
+  }
+
+  currentProblems = result.problems;
+  currentMeta     = result.meta;
+  renderPrintPanel();
+  renderAnswerPanel();
+
+  // タブ2・3のボタンを有効化
+  $("tabBtnPrint").disabled = false;
+  $("tabBtnAnswer").disabled = false;
+
+  // 問題表示タブに自動切替
+  switchTab("print");
+});
+
+// L-040 / L-041: 印刷プリセット
+// L-041 再改訂: 紙面有効活用のため 10/20/30 → 20/40/60 (2倍)
+const PRINT_PRESETS = {
+  l: { problemsPerPage: 20, cols: 2, label: "大" },
+  m: { problemsPerPage: 40, cols: 2, label: "中" },
+  s: { problemsPerPage: 60, cols: 3, label: "小" }
+};
+function getPrintPreset() {
+  const v = $("printSize") ? $("printSize").value : "m";
+  return PRINT_PRESETS[v] ? v : "m";
+}
+
+function renderPrintPanel() {
+  const sizeKey = getPrintPreset();
+  const PROBLEMS_PER_PAGE = PRINT_PRESETS[sizeKey].problemsPerPage;
+  const COLS = PRINT_PRESETS[sizeKey].cols;
+  const pages = [];
+  for (let i = 0; i < currentProblems.length; i += PROBLEMS_PER_PAGE) {
+    pages.push(currentProblems.slice(i, i + PROBLEMS_PER_PAGE));
+  }
+  const totalPages = pages.length;
+  const pagesHtml = pages.map(function(pageProblems, pageIdx) {
+    const pageNo = pageIdx + 1;
+    const startNo = pageIdx * PROBLEMS_PER_PAGE;
+    // L-043: 実問題数に応じて行数を動的に決定 (列バランス担保)
+    const rows = Math.ceil(pageProblems.length / COLS);
+    const rowsStyle = 'grid-template-rows: repeat(' + rows + ', 1fr);';
+    return '<div class="print-page" data-size="' + sizeKey + '">' +
+      '<div class="sheet-title">' + escapeHtml(currentTitle) + '</div>' +
+      '<div class="meta-line">' +
+        '問題数: ' + currentProblems.length + ' / シード: ' + currentMeta.seed +
+        ' / ' + pageNo + ' / ' + totalPages + ' ページ' +
+      '</div>' +
+      '<div class="problems" style="' + rowsStyle + '">' +
+        pageProblems.map(function(p, j) {
+          return '<div class="problem">' +
+                   '<span class="num">(' + (startNo + j + 1) + ')</span>' +
+                   '<div class="content">' + renderMath(p.question) + '</div>' +
+                 '</div>';
+        }).join("") +
+      '</div>' +
+    '</div>';
+  }).join("");
+  $("printPanel").innerHTML = pagesHtml;
+}
+
+function renderAnswerPanel() {
+  const sizeKey = getPrintPreset();
+  const PROBLEMS_PER_PAGE = PRINT_PRESETS[sizeKey].problemsPerPage;
+  const COLS = PRINT_PRESETS[sizeKey].cols;
+  const pages = [];
+  for (let i = 0; i < currentProblems.length; i += PROBLEMS_PER_PAGE) {
+    pages.push(currentProblems.slice(i, i + PROBLEMS_PER_PAGE));
+  }
+  const totalPages = pages.length;
+  const pagesHtml = pages.map(function(pageProblems, pageIdx) {
+    const pageNo = pageIdx + 1;
+    const startNo = pageIdx * PROBLEMS_PER_PAGE;
+    // L-043: 実問題数に応じて行数を動的に決定 (列バランス担保)
+    const rows = Math.ceil(pageProblems.length / COLS);
+    const rowsStyle = 'grid-template-rows: repeat(' + rows + ', 1fr);';
+    return '<div class="print-page" data-size="' + sizeKey + '">' +
+      '<div class="sheet-title">' + escapeHtml(currentTitle) + ' - 解答</div>' +
+      '<div class="meta-line">' +
+        '問題数: ' + currentProblems.length + ' / シード: ' + currentMeta.seed +
+        ' / ' + pageNo + ' / ' + totalPages + ' ページ' +
+      '</div>' +
+      '<div class="answers" style="' + rowsStyle + '">' +
+        pageProblems.map(function(p, j) {
+          // L-038: 穴埋め問題は 2 段表示
+          let contentHtml;
+          if (p.placeholder) {
+            contentHtml =
+              '<div class="content ans-multi">' +
+                '<div class="ans-line">' + renderMath(p.question) + '</div>' +
+                '<div class="ans-line">' + renderMath("□ = " + p.answer.display) + '</div>' +
+              '</div>';
+          } else {
+            contentHtml =
+              '<div class="content">' + renderMath(buildAnsweredLine(p)) + '</div>';
+          }
+          return '<div class="answer-item">' +
+                   '<span class="num">(' + (startNo + j + 1) + ')</span>' +
+                   contentHtml +
+                 '</div>';
+        }).join("") +
+      '</div>' +
+    '</div>';
+  }).join("");
+  $("answerPanel").innerHTML = pagesHtml;
+}
+
+// 印刷 (L-042: beforeprint/afterprint で確実に同期)
+// Chrome の window.print() は即時 return するので setTimeout で remove すると
+// プレビュー描画前にクラスが剥がれて白紙になる。代わりに beforeprint で
+// 現在 active なタブに print-target を付け、afterprint で剥がす。
+// これにより in-app ボタンでも、ブラウザ直接 Ctrl+P でも正しく印刷できる。
+window.addEventListener("beforeprint", function() {
+  var active = document.querySelector(".tab-panel.active");
+  if (active && (active.id === "tab-print" || active.id === "tab-answer")) {
+    active.classList.add("print-target");
+  } else if ($("tab-print") && !$("tab-print").innerHTML.includes("問題が生成")) {
+    // gen タブにいる時の Ctrl+P は問題タブを既定で印刷
+    if ($("printPanel") && $("printPanel").innerHTML.trim()) {
+      $("tab-print").classList.add("print-target");
+    }
+  }
+});
+window.addEventListener("afterprint", function() {
+  var t1 = $("tab-print"); if (t1) t1.classList.remove("print-target");
+  var t2 = $("tab-answer"); if (t2) t2.classList.remove("print-target");
+});
+$("printBtn").addEventListener("click", function() { window.print(); });
+$("printAnswerBtn").addEventListener("click", function() { window.print(); });
+
+// 設定に戻る
+$("regenBtn").addEventListener("click", function() { switchTab("gen"); });
+
+})();
+</script>
+</body>
+</html>
